@@ -1,0 +1,35 @@
+--- a/erpnext/controllers/taxes_and_totals.py
++++ b/erpnext/controllers/taxes_and_totals.py
+@@ -283,13 +283,30 @@ class calculate_taxes_and_totals:
+ 			if (
+ 				not self.discount_amount_applied
+ 				and item.qty
+ 				and (cumulated_tax_fraction or total_inclusive_tax_amount_per_qty)
+ 			):
+ 				amount = flt(item.amount) - total_inclusive_tax_amount_per_qty
+ 
+-				item.net_amount = flt(amount / (1 + cumulated_tax_fraction), item.precision("net_amount"))
+-				item.net_rate = flt(item.net_amount / item.qty, item.precision("net_rate"))
++				# FIX: Ensure tax-inclusive line reconciliation
++				# Step 1: Calculate net_rate with full precision, then round to currency precision
++				net_rate_unrounded = amount / (1 + cumulated_tax_fraction) / item.qty
++				item.net_rate = flt(net_rate_unrounded, item.precision("net_rate"))
++				
++				# Step 2: Recompute net_amount from the rounded net_rate
++				# This ensures: rounded_net_rate × qty = rounded_net_amount
++				# at the declared currency precision level
++				item.net_amount = flt(item.net_rate * item.qty, item.precision("net_amount"))
++				
++				# Step 3: (Optional) Track rounding adjustment for tax reconciliation
++				# The difference between the high-precision calculation and rounded result
++				# can be used for rounding adjustment accounts if needed
++				rounding_diff = flt(
++					(amount / (1 + cumulated_tax_fraction)) - item.net_amount,
++					item.precision("net_amount")
++				)
++				# Note: This rounding_diff is captured but currently not used
++				# It could be implemented in adjust_grand_total_for_inclusive_tax() if needed
++
+ 				item.discount_percentage = flt(
+ 					item.discount_percentage, item.precision("discount_percentage")
+ 				)
